@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# venv (가상환경)
+venv/
+env/
+.venv/
+venv310/
+venv3*/
+# ↑ 네가 사용하는 가상환경 폴더도 무조건 제외해야 함
+
+# 환경설정
+*.env
+.env.*
+!env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Flask / FastAPI
+instance/
+*.log
+
+# Uploaded files
+uploads/
+captures/
+static/uploads/
+static/captures/
+
+# Database
+*.db
+*.sqlite3
+
+# Build/cache
+dist/
+build/
+*.egg-info/
+
+# PyTest
+.pytest_cache/
+.cache/
+
+# Gunicorn / Uvicorn
+gunicorn-error.log
+gunicorn-access.log
