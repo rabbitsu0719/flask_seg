@@ -12,13 +12,23 @@ lower = np.array([0, 30, 60], dtype=np.uint8)
 upper = np.array([20, 150, 255], dtype=np.uint8)
 mask = cv2.inRange(hsv, lower, upper)
 
-# 3) 마스크를 이용해 알파 채널 생성 (피부 영역만 남기고 나머지는 투명)
+# 3) Skin Mask (흰색 = 피부)
+skin_mask = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
+
+# 4) Face Removed (피부 영역만 제거)
+mask_inv = cv2.bitwise_not(mask)
+face_removed = cv2.bitwise_and(img, img, mask=mask_inv)
+
+# 5) Transparent 출력
 b, g, r = cv2.split(img)
-alpha = mask
-
+alpha = mask_inv  # 피부는 투명(0), 나머지 불투명
 rgba = cv2.merge([b, g, r, alpha])
-
-# 4) PNG로 저장
 cv2.imwrite("result.png", rgba)
 
-print("✅ result.png 생성 완료")
+# 6) 창으로 보기
+cv2.imshow("Original Image", img)
+cv2.imshow("Skin Mask", skin_mask)
+cv2.imshow("Face Removed (using HSV)", face_removed)
+
+cv2.waitKey(0)
+cv2.destroyAllWindows()
