@@ -52,3 +52,12 @@ build/
 # Gunicorn / Uvicorn
 gunicorn-error.log
 gunicorn-access.log
+*.pt
+*.pth
+*.onnx
+*.bin
+runs/
+uploads/
+__pycache__/
+venv*/
+*.zip
