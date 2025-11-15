@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>음식 이미지 배경제거 (SAM)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <header>
+    <h1>🍜 음식 이미지 배경제거 (SAM)</h1>
+    <p class="hint">업로드 → 이미지 클릭(여러 번) → 배경 제거 → 다운로드</p>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h3>1) 업로드</h3>
+      <input id="file" type="file" accept="image/*" />
+      <div class="row">
+        <button id="btnUpload">업로드</button>
+        <span id="msg" class="hint"></span>
+      </div>
+
+      <h3 style="margin-top:16px">2) 미리보기 (여기 클릭해서 전경 선택)</h3>
+      <img id="img" alt="업로드 미리보기" />
+      <div class="hint">이미지 위를 클릭하면 해당 지점을 전경으로 간주해 마스크가 추가됩니다.</div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="btnDelete" disabled>배경 제거 적용</button>
+        <button id="btnClear" disabled>선택 마스크 초기화</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>결과 / 프리뷰</h3>
+      <img id="preview" alt="프리뷰" />
+      <div class="row" style="margin-top:10px">
+        <a id="btnDownload" href="#" download="edited_image.png"><button disabled>다운로드(PNG)</button></a>
+        <button id="btnSave" disabled>서버 저장</button>
+      </div>
+
+      <h3 style="margin-top:16px">로그</h3>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const imgEl = $("img");
+const previewEl = $("preview");
+const logEl = $("log");
+const btnUpload = $("btnUpload");
+const btnDelete = $("btnDelete");
+const btnClear = $("btnClear");
+const btnDownloadLink = $("btnDownload");
+const btnDownload = btnDownloadLink.querySelector("button");
+const btnSave = $("btnSave");
+const msg = $("msg");
+
+let naturalW = 0, naturalH = 0;
+
+function log(t){ logEl.textContent = (new Date()).toLocaleTimeString() + "  " + t + "\n" + logEl.textContent; }
+function enableActions(on){
+  btnDelete.disabled = !on;
+  btnClear.disabled  = !on;
+  btnSave.disabled   = !on;
+  btnDownload.disabled = !on;
+}
+
+btnUpload.addEventListener("click", async () => {
+  const f = $("file").files[0];
+  if(!f){ alert("이미지 파일을 선택하세요."); return; }
+  const fd = new FormData();
+  fd.append("image", f);
+  msg.textContent = "업로드 중...";
+  try{
+    const r = await fetch("/upload", { method: "POST", body: fd });
+    const j = await r.json();
+    if(!r.ok){ throw new Error(j.error || "업로드 실패"); }
+    msg.textContent = "업로드 완료! 이미지를 클릭해 전경을 선택하세요.";
+    log("upload ok");
+    // 미리보기 설정
+    const url = URL.createObjectURL(f);
+    const img = $("img");
+    img.src = url;
+    img.onload = () => { naturalW = img.naturalWidth; naturalH = img.naturalHeight; };
+    // 서버 쪽 현재 이미지 프리뷰
+    refreshPreview();
+    enableActions(true);
+  }catch(e){
+    msg.textContent = e.message;
+    log("upload error: " + e.message);
+  }
+});
+
+$("img").addEventListener("click", async (ev) => {
+  if(!naturalW || !naturalH){ alert("먼저 이미지를 업로드하세요."); return; }
+  const rect = ev.target.getBoundingClientRect();
+  const scaleX = naturalW / rect.width;
+  const scaleY = naturalH / rect.height;
+  const x = Math.round((ev.clientX - rect.left) * scaleX);
+  const y = Math.round((ev.clientY - rect.top)  * scaleY);
+
+  try{
+    const r = await fetch("/click", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({x, y})
+    });
+    if(r.ok){
+      const blob = await r.blob();
+      $("preview").src = URL.createObjectURL(blob);
+      log(`click (${x},${y}) -> mask added`);
+    }else{
+      const j = await r.json().catch(()=>({}));
+      throw new Error(j.error || "마스크 생성 실패");
+    }
+  }catch(e){
+    log("click error: " + e.message);
+    alert(e.message);
+  }
+});
+
+btnDelete.addEventListener("click", async () => {
+  try{
+    const r = await fetch("/delete", { method:"POST" });
+    const j = await r.json();
+    if(!r.ok){ throw new Error(j.error || "배경 제거 실패"); }
+    log("delete ok");
+    const pr = await fetch("/preview");
+    if(pr.ok){
+      const blob = await pr.blob();
+      $("preview").src = URL.createObjectURL(blob);
+    }
+  }catch(e){
+    log("delete error: " + e.message);
+    alert(e.message);
+  }
+});
+
+btnSave.addEventListener("click", async () => {
+  try{
+    const r = await fetch("/save");
+    const j = await r.json();
+    if(!r.ok){ throw new Error(j.error || "저장 실패"); }
+    log("save ok: " + (j.message || ""));
+  }catch(e){
+    log("save error: " + e.message);
+    alert(e.message);
+  }
+});
+
+btnClear.addEventListener("click", async () => {
+  // 서버에 별도 clear 라우트가 없다면 프리뷰만 초기화
+  $("preview").src = "";
+  log("local preview cleared (서버 마스크는 /upload 시 초기화됨)");
+});
+
+btnDownloadLink.addEventListener("click", async (ev) => {
+  ev.preventDefault();
+  try{
+    const r = await fetch("/download");
+    if(!r.ok){ throw new Error("다운로드 실패"); }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    btnDownloadLink.href = url;
+    btnDownloadLink.click();
+    log("download ok");
+  }catch(e){
+    log("download error: " + e.message);
+    alert(e.message);
+  }
+});
+
+async function refreshPreview(){
+  const r = await fetch("/preview");
+  if(r.ok){
+    const blob = await r.blob();
+    $("preview").src = URL.createObjectURL(blob);
+  }else{
+    $("preview").removeAttribute("src");
+  }
+}
+</script>
+</body>
+</html>
